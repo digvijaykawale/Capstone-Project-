@@ -1,0 +1,617 @@
+---
+title: "Capstone Project"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  word_document: default
+---
+
+
+```{r}
+data <- read.csv("~/Desktop/Capstone Project/Data/capstone_data.csv")
+
+set.seed(13437586)
+sample_index <- sample(nrow(data),nrow(data)*0.80)
+data_train <- data[sample_index,]
+data_test <- data[-sample_index,]
+summary(data_train)
+```
+
+```{r}
+library(ggplot2)
+ggplot(data_train, aes(x = radius, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 1)
+```
+
+```{r}
+boxplot(radius~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="Radius")
+```
+
+```{r}
+ggplot(data_train, aes(x = texture, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 1)
+```
+
+```{r}
+boxplot(texture~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="Texture")
+```
+
+```{r}
+ggplot(data_train, aes(x = perimeter, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 3)
+```
+
+```{r}
+boxplot(perimeter~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="Perimeter")
+```
+
+```{r}
+ggplot(data_train, aes(x = X.area, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 25)
+```
+
+```{r}
+boxplot(X.area~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="Area")
+```
+
+```{r}
+ggplot(data_train, aes(x = smoothness, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 0.005)
+```
+
+```{r}
+boxplot(smoothness~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="smoothness")
+
+```
+
+```{r}
+ggplot(data_train, aes(x = compactness, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 0.01)
+```
+
+```{r}
+boxplot(compactness~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="compactness")
+
+```
+```{r}
+ggplot(data_train, aes(x = concavity, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 0.01)
+```
+
+```{r}
+boxplot(concavity~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="concavity")
+
+```
+
+```{r}
+ggplot(data_train, aes(x = concave.points, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 0.005)
+
+```
+
+```{r}
+boxplot(concave.points~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="concave.points")
+```
+
+```{r}
+ggplot(data_train, aes(x = symmetry, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 0.01)
+
+```
+
+```{r}
+boxplot(symmetry~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="symmetry")
+```
+
+```{r}
+ggplot(data_train, aes(x = fractal.dimension, fill = Diagnosis)) + geom_histogram(position = "dodge", binwidth = 0.005)
+```
+
+```{r}
+boxplot(fractal.dimension~Diagnosis,data=data_train, 
+   xlab="Diagnosis", ylab="fractal.dimension")
+```
+
+
+
+```{r}
+library(corrplot)
+predictors <- dplyr::select(data_train, radius, texture, perimeter, X.area, smoothness, compactness, concavity, concave.points, symmetry, fractal.dimension)
+
+M <- cor(predictors)
+corrplot(M, method = "circle")
+```
+
+
+
+# Model Fiting 
+
+## Loading Libraries
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(corrr)
+library(MASS)
+library(psych)
+library(ROCR)
+library(mltools)
+library(pROC)
+library(rpart)
+```
+
+## Logistic Regression
+
+```{r}
+#All variables
+
+model_1 <-  glm(Diagnosis ~ radius + texture + perimeter+ X.area + smoothness + compactness + concavity + concave.points + symmetry + fractal.dimension, family = binomial, data = data_train)
+
+summary(model_1)
+```
+
+
+```{r}
+#Deciding from EDA graphs
+model_2 <-  glm(Diagnosis ~ radius + perimeter + X.area + compactness + concavity + concave.points, family = binomial, data = data_train)
+
+summary(model_2)
+
+```
+
+```{r}
+data_train_1 <- dplyr::select(data_train,Diagnosis, radius, texture, perimeter, X.area, smoothness, compactness, concavity, concave.points, symmetry, fractal.dimension)
+
+
+GLM_diagnosis_null <- glm(Diagnosis ~ 1, family = binomial, data = data_train_1)
+GLM_diagnosis_full <- glm(Diagnosis ~ ., family = binomial, data = data_train_1)
+
+fit1_GLM <- step(GLM_diagnosis_null, scope = list(lower =GLM_diagnosis_null,upper = GLM_diagnosis_full),    direction = 'forward')
+```
+
+```{r}
+fit2_GLM <- step(GLM_diagnosis_null, scope = list(lower =GLM_diagnosis_null,upper = GLM_diagnosis_full),    direction = 'forward', k = log(nrow(data_train_1)))
+```
+
+
+```{r}
+
+model_3 <-  glm(Diagnosis ~ concave.points + texture + X.area + perimeter + concavity + 
+    smoothness + radius, family = binomial, data = data_train)
+
+summary(model_3)
+
+```
+
+# Comparing 3 models using the ROC/AUC
+
+```{r}
+thresh <- seq(0.01, 0.5, 0.01)
+
+pred_prob_1 <- predict(model_1, type = "response")
+pred_prob_2 <- predict(model_2, type = "response")
+pred_prob_3 <- predict(model_3, type = "response")
+
+## Data Frames for Graphs
+
+data_train_1 <- data.frame(data_train_1, pred_prob_1)
+
+sensitivity_1<- specificity_1 <- rep(NA, length(thresh))
+for (j in seq(along = thresh)){
+  pp_1 <- ifelse(data_train_1$pred_prob_1 < thresh[j], "B","M")
+  xx_1 <- xtabs(~Diagnosis + pp_1, data_train_1)
+  specificity_1[j] <- xx_1[1,1]/(xx_1[1,1] + xx_1[1,2])
+  sensitivity_1[j] <- xx_1[2,2]/(xx_1[2,1] + xx_1[2,2])
+}
+
+data_train_1 <- data.frame(data_train_1, pred_prob_2)
+
+sensitivity_2 <- specificity_2 <- rep(NA, length(thresh))
+for (j in seq(along = thresh)){
+  pp_2 <- ifelse(data_train_1$pred_prob_2 < thresh[j], "B","M")
+  xx_2 <- xtabs(~Diagnosis + pp_2, data_train_1)
+  specificity_2[j] <- xx_2[1,1]/(xx_2[1,1] + xx_2[1,2])
+  sensitivity_2[j] <- xx_2[2,2]/(xx_2[2,1] + xx_2[2,2])
+}
+
+data_train_1 <- data.frame(data_train_1, pred_prob_3)
+
+sensitivity_3 <- specificity_3 <- rep(NA, length(thresh))
+for (j in seq(along = thresh)){
+  pp_3 <- ifelse(data_train_1$pred_prob_3 < thresh[j], "B","M")
+  xx_3 <- xtabs(~Diagnosis + pp_3, data_train_1)
+  specificity_3[j] <- xx_3[1,1]/(xx_3[1,1] + xx_3[1,2])
+  sensitivity_3[j] <- xx_3[2,2]/(xx_3[2,1] + xx_3[2,2])
+}
+
+
+#ROC for model 1
+
+plot(1-specificity_1, sensitivity_1, type = "l", xlab = "1-Specificity", ylab = "Sensitivity"); abline(0,1, lty = 2)
+
+```
+
+```{r}
+#Auc for model 1
+actual <- ifelse(data_train_1$Diagnosis == 'B', 0, 1)
+pred_1 <- ifelse(pp_1 == 'B', 0, 1)
+
+auc( pred_1 , actual)
+```
+
+```{r}
+# Out of sample model 1
+
+data_test_1 <- dplyr::select(data_test,Diagnosis, radius, texture, perimeter, X.area, smoothness, compactness, concavity, concave.points, symmetry, fractal.dimension)
+
+pred_1_test <- predict(model_1, newdata = data_test_1, type="response")
+
+
+pred_a <- prediction(pred_1_test, data_test_1$Diagnosis)
+perf <- performance(pred_a, "tpr", "fpr")
+plot(perf, colorize=TRUE)
+
+
+```
+
+```{r}
+unlist(slot(performance(pred_a, "auc"), "y.values"))
+```
+
+```{r}
+
+## finding Optimal cut off probability
+
+costfunc = function(obs, pred.p, pcut){
+    weight1 = 10   # define the weight for "true=1 but pred=0" (FN)
+    weight0 = 1    # define the weight for "true=0 but pred=1" (FP)
+    c1 = (obs=='M')&(pred.p<pcut)    # count for "true=1 but pred=0"   (FN)
+    c0 = (obs=='B')&(pred.p>=pcut)   # count for "true=0 but pred=1"   (FP)
+    cost = mean(weight1*c1 + weight0*c0)  # misclassification with weight
+    return(cost) # you have to return to a value when you write R functions
+} # end
+
+
+p.seq = seq(0.01, 1, 0.01) 
+
+cost = rep(0, length(p.seq))  
+for(i in 1:length(p.seq)){ 
+    cost[i] = costfunc(obs = data_train_1$Diagnosis, pred.p = pred_prob_1, pcut = p.seq[i])  
+} # end of the loop
+
+plot(p.seq, cost)
+
+
+```
+
+```{r}
+
+## Confusion matrix 
+
+# Training Data
+diagnosis_1 <- ifelse(pred_prob_1 < 0.15, 'B', 'M')
+table(data_train_1$Diagnosis, diagnosis_1, dnn = c("True", "Pred"))
+
+#Testing Data
+diagnosis_1_test <- ifelse(pred_1_test < 0.15, 'B', 'M')
+table(data_test_1$Diagnosis, diagnosis_1_test, dnn = c("True", "Pred"))
+```
+
+
+
+```{r}
+optimal.pcut.glm0_1 = p.seq[which(cost==min(cost))]
+```
+
+
+```{r}
+#ROC for model 2
+
+plot(1-specificity_2, sensitivity_2, type = "l", xlab = "Sensitivity", ylab = "1-Specificity"); abline(0,1, lty = 2)
+
+
+```
+
+```{r}
+
+#AUC for model 2
+pred_2 <- ifelse(pp_2 == 'B', 0, 1)
+
+auc( pred_2 , actual)
+```
+
+```{r}
+# Out of sample model 2
+
+pred_2_test <- predict(model_2, newdata = data_test_1, type="response")
+
+
+pred_b <- prediction(pred_2_test, data_test_1$Diagnosis)
+perf <- performance(pred_b, "tpr", "fpr")
+plot(perf, colorize=TRUE)
+
+```
+
+```{r}
+unlist(slot(performance(pred_b, "auc"), "y.values"))
+```
+
+
+```{r}
+## finding Optimal cut off probability
+
+costfunc = function(obs, pred.p, pcut){
+    weight1 = 10   # define the weight for "true=1 but pred=0" (FN)
+    weight0 = 1    # define the weight for "true=0 but pred=1" (FP)
+    c1 = (obs=='M')&(pred.p<pcut)    # count for "true=1 but pred=0"   (FN)
+    c0 = (obs=='B')&(pred.p>=pcut)   # count for "true=0 but pred=1"   (FP)
+    cost = mean(weight1*c1 + weight0*c0)  # misclassification with weight
+    return(cost) # you have to return to a value when you write R functions
+} # end
+
+
+p.seq = seq(0.01, 1, 0.01) 
+
+cost = rep(0, length(p.seq))  
+for(i in 1:length(p.seq)){ 
+    cost[i] = costfunc(obs = data_train_1$Diagnosis, pred.p = pred_prob_2, pcut = p.seq[i])  
+} # end of the loop
+
+plot(p.seq, cost)
+
+```
+
+
+```{r}
+## Confusion matrix 
+
+# Training Data
+diagnosis_2 <- ifelse(pred_prob_2 < 0.1, 'B', 'M')
+table(data_train_1$Diagnosis, diagnosis_2, dnn = c("True", "Pred"))
+
+#Testing Data
+diagnosis_2_test <- ifelse(pred_2_test < 0.1, 'B', 'M')
+table(data_test_1$Diagnosis, diagnosis_2_test, dnn = c("True", "Pred"))
+```
+
+
+
+```{r}
+optimal.pcut.glm0_2 = p.seq[which(cost==min(cost))]
+optimal.pcut.glm0_2
+```
+
+
+
+
+```{r}
+#ROC for model 3
+
+plot(1-specificity_3, sensitivity_3, type = "l", xlab = "Sensitivity", ylab = "1-Specificity"); abline(0,1, lty = 2)
+```
+
+```{r}
+#Auc for model 3
+pred_3 <- ifelse(pp_3 == 'B', 0, 1)
+
+auc( pred_3 , actual)
+
+```
+
+```{r}
+# Out of sample model 3
+
+pred_3_test <- predict(model_3, newdata = data_test_1, type="response")
+
+
+pred_c <- prediction(pred_3_test, data_test_1$Diagnosis)
+perf <- performance(pred_c, "tpr", "fpr")
+plot(perf, colorize=TRUE)
+```
+
+```{r}
+unlist(slot(performance(pred_c, "auc"), "y.values"))
+```
+
+```{r}
+
+## finding Optimal cut off probability
+
+costfunc = function(obs, pred.p, pcut){
+    weight1 = 10   # define the weight for "true=1 but pred=0" (FN)
+    weight0 = 1    # define the weight for "true=0 but pred=1" (FP)
+    c1 = (obs=='M')&(pred.p<pcut)    # count for "true=1 but pred=0"   (FN)
+    c0 = (obs=='B')&(pred.p>=pcut)   # count for "true=0 but pred=1"   (FP)
+    cost = mean(weight1*c1 + weight0*c0)  # misclassification with weight
+    return(cost) # you have to return to a value when you write R functions
+} # end
+
+
+p.seq = seq(0.01, 1, 0.01) 
+
+cost = rep(0, length(p.seq))  
+for(i in 1:length(p.seq)){ 
+    cost[i] = costfunc(obs = data_train_1$Diagnosis, pred.p = pred_prob_3, pcut = p.seq[i])  
+} # end of the loop
+
+plot(p.seq, cost)
+
+
+```
+
+```{r}
+
+## Confusion matrix 
+
+# Training Data
+diagnosis_3 <- ifelse(pred_prob_3 < 0.16, 'B', 'M')
+table(data_train_1$Diagnosis, diagnosis_3, dnn = c("True", "Pred"))
+
+#Testing Data
+diagnosis_3_test <- ifelse(pred_3_test < 0.16, 'B', 'M')
+table(data_test_1$Diagnosis, diagnosis_3_test, dnn = c("True", "Pred"))
+```
+
+
+
+```{r}
+optimal.pcut.glm0_3 = p.seq[which(cost==min(cost))]
+```
+
+
+```{r}
+xx_1
+
+```
+
+```{r}
+(xx_1[1,1] + xx_1[2,2])/ (xx_1[1,1] + xx_1[2,2] + xx_1[1,2] + xx_1[2,1])
+```
+
+
+```{r}
+xx_2
+
+```
+
+```{r}
+(xx_2[1,1] + xx_2[2,2])/ (xx_2[1,1] + xx_2[2,2] + xx_2[1,2] + xx_2[2,1])
+```
+
+
+```{r}
+xx_3
+
+```
+
+```{r}
+(xx_3[1,1] + xx_3[2,2])/ (xx_3[1,1] + xx_3[2,2] + xx_3[1,2] + xx_3[2,1])
+```
+
+
+# CART
+
+```{r}
+
+data_train_1 <- dplyr::select(data_train,Diagnosis, radius, texture, perimeter, X.area, smoothness, compactness, concavity, concave.points, symmetry, fractal.dimension)
+
+data_test_1 <- dplyr::select(data_test,Diagnosis, radius, texture, perimeter, X.area, smoothness, compactness, concavity, concave.points, symmetry, fractal.dimension)
+
+tree1 <- rpart(formula = Diagnosis ~ ., data = data_train_1, method = "class")
+
+tree1 <- rpart(formula = Diagnosis ~ . , data = data_train_1, method = "class", parms = list(loss=matrix(c(0,10,1,0), nrow = 2)))
+
+
+pred_cart <- predict(tree1, type="class")
+xx_4 <- table(data_train_1$Diagnosis, pred_cart, dnn = c("True", "Pred"))
+
+xx_4
+
+```
+
+
+```{r}
+(xx_4[1,1] + xx_4[2,2])/ (xx_4[1,1] + xx_4[2,2] + xx_4[1,2] + xx_4[2,1])
+
+```
+
+```{r}
+tree1
+```
+
+```{r}
+library(rpart.plot)
+prp(tree1, extra = 1)
+```
+
+```{r}
+# Prediction on Testing Data
+pred_cart_test <- predict(tree1, data_test_1, type="class")
+table(data_test_1$Diagnosis, pred_cart_test, dnn = c("True", "Pred"))
+
+```
+
+# Random Forests
+
+```{r}
+library(randomForest)
+rf <- randomForest(Diagnosis~., data = data_train_1, ntree = 490)
+rf
+
+```
+
+```{r}
+plot(rf, lwd=rep(2, 3))
+legend("right", legend = c("OOB Error", "FPR", "FNR"), lwd=rep(2, 3), lty = c(1,2,3), col = c("black", "red", "green"))
+```
+
+
+```{r}
+rf_pred<- predict(rf, type = "prob")[,2]
+costfunc = function(obs, pred.p, pcut){
+    weight1 = 10   # define the weight for "true=1 but pred=0" (FN)
+    weight0 = 1    # define the weight for "true=0 but pred=1" (FP)
+    c1 = (obs=="M")&(pred.p<pcut)    # count for "true=1 but pred=0"   (FN)
+    c0 = (obs=="B")&(pred.p>=pcut)   # count for "true=0 but pred=1"   (FP)
+    cost = mean(weight1*c1 + weight0*c0)  # misclassification with weight
+    return(cost) # you have to return to a value when you write R functions
+} 
+p.seq = seq(0.01, 0.5, 0.01)
+cost = rep(0, length(p.seq))  
+for(i in 1:length(p.seq)){ 
+    cost[i] = costfunc(obs = data_train_1$Diagnosis, pred.p = rf_pred, pcut = p.seq[i])  
+}
+plot(p.seq, cost)
+```
+
+```{r}
+optimal.pcut= p.seq[which(cost==min(cost))]
+optimal.pcut
+```
+
+```{r}
+## Confusion matrix 
+
+# Training Data
+diagnosis_rf <- ifelse(rf_pred < 0.25, 'B', 'M')
+table(data_train_1$Diagnosis, diagnosis_rf, dnn = c("True", "Pred"))
+
+
+pred_rf_test<- predict(rf, newdata=data_test_1, type = "prob")[,2]
+
+#Testing Data
+diagnosis_rf_test <- ifelse(pred_rf_test < 0.25, 'B', 'M')
+table(data_test_1$Diagnosis, diagnosis_rf_test, dnn = c("True", "Pred"))
+
+
+```
+
+```{r}
+# Tuning Parameter: Number of trees 
+ntree<- seq(10, 1000, 10)
+err <- rep(0, length(ntree))
+actual <- ifelse(data_test_1$Diagnosis == 'B', 0, 1)
+
+i = 1
+for (variable in ntree) {
+rf <- randomForest(Diagnosis~., data = data_train_1, ntree = variable)
+predmat <- predict(rf, newdata = data_test_1)
+predmat <- ifelse(predmat == 'B', 0, 1)
+err[i] = auc(predmat, actual)[1]
+i = i +1
+}
+
+
+
+plot(ntree, err, type = 'l', col=2, lwd=2, xlab = "n.trees", ylab = "AUC")
+abline(h=max(err), lty=2)
+
+```
+
+```{r}
+max(err)
+ntree[49]
+```
+
